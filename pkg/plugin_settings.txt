@@ -1,0 +1,8 @@
+name=Enhanced Log File Monitor
+version=2.2
+platforms=windows linux solaris
+description=Monitor super-large text/log files easily and quickly.
+requiresAgentScript=false
+restartCore=false
+onUpgradeRemoveFiles=true
+onUpgradeRemoveMonitors=false
