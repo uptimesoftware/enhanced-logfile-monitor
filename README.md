@@ -7,13 +7,13 @@ See http://uptimesoftware.github.io for more information.
 
 ### Category
 
-{ page.category }}
+plugin
 
 ### Version Compatibility
 
 
   
-    * Enhacned Log File Monitor 2.2 - 7.2, 7.1, 7.0, 6.0, 5.5, 5.4, 5.3, 5.2
+* Enhacned Log File Monitor 2.2 - 7.2, 7.1, 7.0, 6.0, 5.5, 5.4, 5.3, 5.2
   
 
 
@@ -38,12 +38,25 @@ Then install the agent-side script.</p>
 
 
 ### Input Variables
-* Log Directory* Log Files to Search (regex)* Search String (regex)* Ignore String (regex)
+
+* Log Directory
+
+* Log Files to Search (regex)
+
+* Search String (regex)
+
+* Ignore String (regex)
+
 
 ### Output Variables
 
+
 * Occurrences
 
+
 ### Languages Used
-* Shell/Batch* PHP
+
+* Shell/Batch
+
+* PHP
 
