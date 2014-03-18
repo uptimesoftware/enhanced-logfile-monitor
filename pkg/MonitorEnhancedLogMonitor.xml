@@ -188,5 +188,5 @@
 			</element>
 		</group>	
 	</elements>
-	<help>Monitors log files on the agent system and searches the files for a specified string (regex compatible). It scans only new lines in files and not generate alerts for older issues. It keeps track of this by using a bookmark (in a temp file) so each time it runs it will simply go to the last position in the file and continue scanning. It is designed to scan large (multi-GB) as well as many files within a second.</help>
+	<help>This monitor is designed for use with the up.time monitoring station and Windows, Linux, Solaris or AIX agents. It scans for certain log files on the agent system and searches the files for a specified string (regex compatible). It will scan only new lines in files and not generate alerts for older issues. It keeps track of this by using a bookmark (in a temp file) so each time it runs it will simply go to the last position in the file and continue scanning. It is designed to scan large (multi-GB) as well as many files within a second.</help>
 </uptime>
