@@ -2,7 +2,7 @@
 <uptime xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="4.0" target_grouping="other">
 	<class>Enhanced Log Monitor</class>
 	<exec>com.uptimesoftware.uptime.erdc.MonitorCustomScriptRunner</exec>
-	<erdc_version>3.0</erdc_version>
+	<erdc_version>3.1</erdc_version>
     <category>Operating System Monitors</category>
     <category_related>Applications - Databases, Applications - Email, Applications - General, Applications - Web Services, Domain Services, End User Experience Monitors, Network Device Monitors, Network Service Monitors, Storage Monitors</category_related>
     <grid_info>
