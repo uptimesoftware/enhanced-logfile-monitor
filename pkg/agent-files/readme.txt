@@ -12,6 +12,8 @@ Below is a description of each of the Log Monitor settings that are used:
  Port          - port that the up.time agent is listening on (default 9998)
  Password      - password that the up.time agent has setup
                  (on some/older agents)
+ Debug mode    - Instead of only reading new lines in the log, the monitor will rescan the last 1MB of the log everytime.
+                 Also provides additional output for debugging purposes(Bookmark file location, list of filenames etc).
  Log Directory - the full path location of the log files on the agent system
                  that is to be monitored
  Log Files to Search - Filenames of logs to search through (fully regex
@@ -24,7 +26,15 @@ Below is a description of each of the Log Monitor settings that are used:
  Occurrences   - total number of lines the search string was found
  Response Time - total amount of time the monitor took to run (in milliseconds)
 
-IMPORTANT NOTE: The primary recommendation when adding/creating the service monitor in up.time is to set the "Max Rechecks" to be zero (0) or else you may not receive alerts for this monitor.
+IMPORTANT NOTES:
+
+The primary recommendation when adding/creating the service monitor in up.time is to set the "Max Rechecks" to be zero (0) or else you may not receive alerts for this monitor.
+
+During the inital setup of this monitor, make sure to do two tests of the Serivce Monitor before changing settings.
+As the first time log_monitor.pl is run with a new combination of LogFile/SearchString/IgnoreString it just will create the bookmark file on the agent system and point to the last line of the log.
+It will not actually search the contents of the log file on this initial scan.
+
+
 
 
 2. Agent Installation
