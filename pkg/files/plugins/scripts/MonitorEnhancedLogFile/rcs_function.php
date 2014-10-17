@@ -27,6 +27,7 @@ function agentcmd($host, $port, $cmd, $timeout = 55) {
 		if (!$resource) {
 			//fsockopen failed
 			echo "No connection established. Error: " . $errorstr . "[" . $errorno . "]\n";
+			exit(3);
 		} else {
 			// successfully opened a socket
 			fwrite($resource, $cmd);
