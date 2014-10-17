@@ -41,35 +41,19 @@ function is_agent($veroutput, $agenttype) {
 	return $rv;
 }
 
-// replace spaces for the string "UPSPCTIME"
-$dir = str_replace(' ', "UPSPCTIME", $dir);
-$files_regex = str_replace(' ', "UPSPCTIME", $files_regex);
-$search_regex = str_replace(' ', "UPSPCTIME", $search_regex);
-$ignore_regex = str_replace(' ', "UPSPCTIME", $ignore_regex);
-$search_regex = str_replace('|', "UPORTIME", $search_regex);
-$ignore_regex = str_replace('|', "UPORTIME", $ignore_regex);
-
 // "UPDOTTIME" separates each variable
+//print $dir . "\n" . $files_regex . "\n" . $search_regex . "\n" . $ignore_regex . "\n";
 $break = 'UPDOTTIME';
-$cmdlinevar = $dir . $break .
-			  $files_regex . $break .
-			  $search_regex . $break .
-			  $ignore_regex . $break .
+$cmdlinevar = base64_encode($dir) . $break .
+			  base64_encode($files_regex) . $break .
+			  base64_encode($search_regex) . $break .
+			  base64_encode($ignore_regex) . $break .
 			  $debug_mode;
 
 // depending on the platform (Windows/Others) the command for the remote agent script will be different
 $veroutput = agentcmd($agent_hostname, $agent_port, "ver");
 if (is_agent($veroutput, "windows")) {
 	$cmd = "logmonitor";
-}
-elseif (is_agent($veroutput, "solaris")) {
-	$cmd = "/opt/uptime-agent/scripts/log_monitor.pl";
-}
-elseif (is_agent($veroutput, "linux")) {
-	$cmd = "/opt/uptime-agent/scripts/log_monitor.pl";
-}
-elseif (is_agent($veroutput, "aix")) {
-	$cmd = "/opt/uptime-agent/scripts/log_monitor.pl";
 }
 else {
 	$cmd = "/opt/uptime-agent/scripts/log_monitor.pl";
@@ -78,6 +62,7 @@ else {
 }
 
 $agent_output = uptime_remote_custom_monitor($agent_hostname, $agent_port, $agent_password, $cmd, $cmdlinevar);
+#print $agent_hostname . "\n" . $agent_port . "\n" . $agent_password . "\n" . $cmd . "\n" . $cmdlinevar . "\n";
 if (strlen($agent_output) == 0) {
 	print "Error: No lines returned from agent.";
 	exit(1);

@@ -1,26 +1,41 @@
 #!/usr/bin/perl
 use strict;
-# use the File::Find libraries for searching through the directory for files that match a regex
-use File::Find;
+use warnings;
 
-################################
-# site to obfuscate Perl code: #
-# http://liraz.org/obfus.html  #
-################################
+##############################################################################
+# This log_monitor.pl script will search for occurrences of a string within 
+# a list of files.  The script expects to be called with one large 
+# concatenated variable that contains five other variables.  These variables
+# represent the log file search criteria and are stored in %criteria.
+# The criteria are compared against a bookmark file to ensure the same lines
+# in the log files are not searched multiple times.  Once the files are have 
+# been searched the bookmark file is updated with the last checked line and
+# the occurrences are printed out.
+##############################################################################
 
-##############################################################
-# the following variables may need to be set manually, so let's put them first
-# so they are easier to get at after obfuscating the code
-my $is_unix = 0;		# define if the script will run on a Windows or Unix platform; default Windows
-if (-e "/etc/hosts") {	# determine if it's on Unix
-	$is_unix = 1;
-}
+binmode STDOUT, ":utf8";
+use utf8;
 
-##############################################################
-# get the one variable from the command line and parse it into the main 4 variables
-my $cmdlinevar = $ARGV[1];
-if (length($cmdlinevar) == 0) {
-	# try the first argument instead (Linux agents send arguments as the second arg; the others send it as second)
+use Tie::File;  # for searching through log file and retain a line count
+use MIME::Base64;  # for decoding command line argument
+use JSON;  # for reading and writing the bookmark file
+use Data::Dumper;
+
+
+##############################################################################
+# define if the script is run on a Windows or Unix platform
+my $is_unix = 0;  # default Windows
+$is_unix = 1 if ( -e "/etc/hosts" );  # determine if it's actually Unix
+
+
+##############################################################################
+# get the CLI variable and parse it into the main 5 variables
+my $cmdlinevar = 0;
+$cmdlinevar = $ARGV[1];
+#if (length($cmdlinevar) == 0) {
+if ( !defined $cmdlinevar ) {
+	# try the first argument instead
+    # Linux agents send arguments as the 2nd arg; others send it as 2nd arg
 	$cmdlinevar = $ARGV[0];
 }
 # confirm that we received the necessary arguments by now
@@ -29,54 +44,229 @@ if (length($cmdlinevar) == 0) {
 	exit(1);
 }
 
-$cmdlinevar =~ s/(UPDOTTIME)/ /g;			# "UPDOTTIME" separates each variable
-my @splitline = split(/ /, $cmdlinevar);	# split the command line variables
+$cmdlinevar =~ s/(UPDOTTIME)/ /g;         # UPDOTTIME separates each variable
+my @splitline = split(/ /, $cmdlinevar);  # split the command line variables
 
-# get all the variables from the command line variable
-my $dir          = get_rid_of_quotes($splitline[0]);
-my $files_regex  = get_rid_of_quotes($splitline[1]);
-my $search_regex = get_rid_of_quotes($splitline[2]);
-my $ignore_regex = get_rid_of_quotes($splitline[3]);
-my $debug_mode   = get_rid_of_quotes($splitline[4]);
+# criteria hash contains the search criteria provided by the service monitor
+# {directory}    directory to search in (string)
+# {files_regex}  regular expression of files to search within (string)
+# {search_regex} regular expression of the string to find (string)
+# {ignore_regex} lines will be ignored if they match this regex (string)
+# {debug_mode}   whether to produce debug output
+# {filename}     array of the files matching files_regex (array of strings)
+# {position}     array of bookmark positions (array of integers)
+# {bookmarkpos}  corresponding bookmark array entry
+# the array indexes for {bookmarkpos} and {filename} match up
+my %criteria;
+
+# populate criteria hash with variables from the command line variable
+$criteria{directory}    = decode_base64($splitline[0]);
+$criteria{files_regex}  = decode_base64($splitline[1]);
+$criteria{search_regex} = decode_base64($splitline[2]);
+$criteria{ignore_regex} = decode_base64($splitline[3]);
+$criteria{debug_mode}   = $splitline[4];
+
+$criteria{directory} =~ s/\\/\//g;  # reorientate slashes for consistency
+$criteria{directory} =~ s/\/$//g;  # strip off trailing slash
 
 # set debug_mode variable properly (1 or 0)
-if (lc($debug_mode) eq 'on') {
-	$debug_mode = 1;
+if ( lc( $criteria{debug_mode} ) eq 'on' ) { $criteria{debug_mode} = 1; }
+else { $criteria{debug_mode} = 0; }
+
+# get list of files matching files_regex
+opendir(DIR, $criteria{directory}) || die "$!";
+#@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
+push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
+  grep /${criteria{files_regex}}/, readdir( DIR );
+closedir(DIR);
+
+if ( $criteria{debug_mode} ) {
+	#print Dumper(\%criteria);
 }
-else {
-	$debug_mode = 0;
+
+
+##############################################################################
+# generated filename of the file which contains the bookmark positions
+my $bookmarkfile = gen_bookmark_filename($criteria{directory});
+
+
+##############################################################################
+# store the bookmark file into the array @bookmark
+my @bookmark;
+my $json;
+my $bookmarks;
+my $i;
+my $line;
+if ( -s $bookmarkfile ) {  # if bookmark file is not empty
+	open (BOOKMARK, '<' . $bookmarkfile) || 
+	  die ("Error: Could not open bookmark file for reading!");
+	$json = <BOOKMARK>;
+	close (BOOKMARK);
+	$bookmarks = decode_json($json);
+	
+	if ( $criteria{debug_mode} ) {
+		#print Dumper($bookmarks);
+	}
 }
 
-# insert spaces where they were ("UPSPCTIME")
-$dir          =~ s/(UPSPCTIME)/ /g;
-$files_regex  =~ s/(UPSPCTIME)/ /g;
-$search_regex =~ s/(UPSPCTIME)/ /g;
-$ignore_regex =~ s/(UPSPCTIME)/ /g;
-$search_regex =~ s/(UPORTIME)/\|/g;
-$ignore_regex =~ s/(UPORTIME)/\|/g;
 
-##############################################################
-# variables used in this script
-my @filenames;			# array containing all the valid filenames found
-my @endlinenums;		# array containing all the end line numbers (for bookmarking)
-my $total_count = 0;	# count the number of occurrences
+##############################################################################
+# if in debug mode...
+if ( $criteria{debug_mode} ) {
+	print "Bookmark File: $bookmarkfile\n";
+	print "Checking_Dir: $criteria{directory}\n";
+	print "File_Regex: $criteria{files_regex}\n";
+	print "Search_String: $criteria{search_regex}\n";
+	print "Ignore_String: $criteria{ignore_regex}\n";
+	print "Checking_Files: ";
+	print join ( ",  ", @{$criteria{filename}} );
+	print "\n";
+}
 
-##############################################################
-# generated filename of the file that contains the bookmarks/positions to read from
-# it is generated by converting the following characters:
-# - '\' or '/' to '.'
-# - ' ' to '_'
-my $bookmarkfile = gen_bookmark_filename($dir);
 
+##############################################################################
+# store previous bookmark position in $criteria{position} array then search
+my $j;
+my @logfileArray;
+my $logfile_eof;
+my $linenum;
+my $total_count = 0;  # count the number of occurrences
+my $numfiles = scalar @{$criteria{filename}};
+my $numbookmarks = scalar @bookmark;
+for $i ( 0 .. ($numfiles - 1) ) {
+	# set criteria{position}[i] to zero to start
+	# if doesn't change, then there was no bookmark entry
+	$criteria{position}[$i] = 0; 
+	for $j ( 0 .. ( $numbookmarks - 1 ) ) {
+		if ( $criteria{filename}[$i] eq $bookmark[$j]{filename} and 
+		  $criteria{search_regex} eq $bookmark[$j]{search_regex} and 
+		  $criteria{ignore_regex} eq $bookmark[$j]{ignore_regex} ) {			
+			$criteria{position}[$i] = $bookmark[$j]{position};
+			$criteria{bookmarkpos}[$i] = $j;
+			last;
+		}
+	}	
+	
+	##################################################
+	# start search 1000 lines earlier if in debug mode
+	if ( $criteria{debug_mode} ) {
+		$criteria{position}[$i] -= 1000;
+		$criteria{position}[$i] = 0 if ($criteria{position}[$i] < 0);
+	}
+
+
+	##################################################
+	# read file into @logfileArray
+	tie @logfileArray, 'Tie::File', "$criteria{filename}[$i]" || 
+	  print("Warning: Could not open file " . $criteria{filename}[$i] .
+	    ". Skipping file.\n");
+	$logfile_eof = scalar @logfileArray;	# get the EOF position
+
+	
+	##############################################################
+	# check if the file rotated or the bookmark is no longer valid
+	if ($criteria{position}[$i] > $logfile_eof) {
+		# reset the bookmark to the beginning of the file
+		$criteria{position}[$i] = 0;		
+	}
+	
+	
+	$linenum = $criteria{position}[$i];				
+	#while ($line = <LOGFILE>) {
+	while ( $linenum < $logfile_eof ){
+		eval {
+			### try block
+			# check if we need to ignore/skip the line
+			if ( ( length( $criteria{ignore_regex} ) > 0 ) && 
+			  ( $logfileArray[$linenum] =~ m/${criteria{ignore_regex}}/i ) ) {
+				# skip the line
+			}
+			else {
+				eval {
+					### try block
+					# check if the line matches the search regex
+					if ( $logfileArray[ $linenum ] =~
+					  m/${criteria{search_regex}}/i ) {
+						$total_count++;
+						# print the first 50 matching lines to screen
+						# limit 50, so we don't overload up
+						if ($total_count <= 50) {
+							print $criteria{filename}[$i] . ", line " . 
+							 (($linenum+1)) . " = '$logfileArray[$linenum]'\n";
+						}
+					}
+				};
+				if ($@) {
+					### catch block
+					print ("Error: Invalid regular expression for search string.\n");
+					last;
+				}
+			}
+		};
+		if ($@) {
+			### catch block
+			print ("Error: Invalid regular expression for ignore string.\n");
+			last;
+		}
+		$linenum++;
+	}
+
+	# save new end of file position to bookmark array
+	if ( $criteria{bookmarkpos}[$i] ) {
+		$bookmark[$criteria{bookmarkpos}[$i]]{position} = $logfile_eof;
+	}
+	else { # new bookmark entry
+		$bookmark[$numbookmarks]{filename} = $criteria{filename}[$i];
+		$bookmark[$numbookmarks]{position} = $logfile_eof;
+		$bookmark[$numbookmarks]{search_regex} = $criteria{search_regex};
+		$bookmark[$numbookmarks]{ignore_regex} = $criteria{ignore_regex};
+		$numbookmarks++;
+	}
+	
+	# untie the log file array
+	untie @logfileArray;
+}
+	
+	
+##############################################################################
+# write bookmark array back to bookmark file
+open ( BOOKMARK, '>' . $bookmarkfile ) || 
+  die ("Error: Could not open bookmark file, $bookmarkfile, for writing!");
+$json = encode_json \@bookmark;
+print BOOKMARK $json;
+#my $bookmarkline;
+#$i = 0;
+#foreach ( @bookmark ) {
+#	$bookmarkline = $bookmark[$i]{filename} . '?' . $bookmark[$i]{position} .
+#	  '?' . $bookmark[$i]{searchignore};
+#	print MYFILE "$bookmarkline\n";
+#	$i++;
+#}
+close ( BOOKMARK );
+  
+##############################################################################
+# print out the number of occurrences for the monitor
+print("total_count $total_count\n");
+
+
+##############################################################################
+# generate the bookmark file name based on the directory being searched
 sub gen_bookmark_filename {
+	my $dir = shift;
 	my $pre_dir = '';
 	if ($is_unix) {
 		$pre_dir = '/opt/uptime-agent/tmp/';
 	}
 	else {
-		$pre_dir = 'UPLOGM-';
-	}
-	my $dir = $_[0];
+		if ( -d 'C:\Program Files (x86)\uptime software\up.time agent' ) {
+			# 64bit Windows OS
+			$pre_dir = 'C:\Program Files (x86)\uptime software\up.time agent\UPLOGM-';
+		}
+		else {
+			# 32bit Windows OS
+			$pre_dir = 'C:\Program Files\uptime software\up.time agent\UPLOGM-';
+		}
+	}	
 	chomp($dir);
 	$dir =~ s/\://g;	# get rid of ':'
 	$dir =~ s/\?//g;	# get rid of '?'
@@ -84,292 +274,5 @@ sub gen_bookmark_filename {
 	$dir =~ s/\\/\./g;	# convert '\' to '.'
 	$dir =~ s/\//\./g;	# convert '/' to '.'
 	$dir =~ s/\|/\./g;	# convert '|' to '.'
-	return $pre_dir . $dir . ".bmf";
+	return "$pre_dir" . $dir . ".bmf";
 }
-
-# function that returns the list of files in the directory that match the file regex entered
-sub get_list_of_files
-{
-	eval {
-		### try block
-
-		# skip directories
-		if (! -d) {
-			# search for the file regex
-			if ($_ =~ /^$files_regex$/i) {
-				push(@filenames, $File::Find::name);
-			}
-		}
-	};
-	if ($@) {
-		### catch block
-		print ("Error: Could not check for valid filename; please check regular expression.\n");
-		exit(1);
-	}
-}
-
-# get rid of any quotes/double-quotes from the beginning and/or end of a filename
-sub get_rid_of_quotes
-{
-	my $fn = $_[0];
-	chomp($fn);
-	$fn =~ s/^\'//;
-	$fn =~ s/\'$//;
-	$fn =~ s/^\"//;
-	$fn =~ s/\"$//;
-	return $fn;
-}
-
-
-# get the list of files in the directory that match the file regex entered
-find (\&get_list_of_files, $dir);
-# if in debug mode...
-if ($debug_mode) {
-	print "Bookmark File: '$bookmarkfile'\n";
-	print "Checking_Dir: $dir\n";
-	print "File_Regex: $files_regex\n";
-	print "Checking_Files: @filenames\n";
-	print "Search_String: $search_regex\n";
-	print "Ignore_String: $ignore_regex\n";
-}
-
-# go through the list of filenames
-my $numoffiles = @filenames;
-my $line;
-for (my $i = 0; $i < $numoffiles; $i++) {
-	my $bookmarkedlineposition = 0;
-	my $logfile = $filenames[$i];
-	my $previouslybookmarked = 0; # 0 = false, 1 = true
-	
-	# get the last bookmark for this filename (if the bookmark file exists and is not zero size)
-	if (-s $bookmarkfile) {
-		open (BOOKMARK, "<" . $bookmarkfile) || die ("Error: Could not open bookmark temp file for reading!");
-		while ($line = <BOOKMARK>) {	# read bookmark file
-			my @splitline = split(/\?/, $line);	# split the bookmarked line (FILENAME?POS?SEARCH)
-			if (($splitline[0] eq $logfile) && (@splitline == 3)) {
-				# now let's verify if it's the same search/ignore string
-				my $searchstr = $search_regex . $ignore_regex;
-				$searchstr =~ s/\?//g;	# get rid of '?'
-				chomp($splitline[2]);	# get rid of the new line at the end
-				if ($splitline[2] eq $searchstr) {
-					# found the filename and it's the right search string, so let's save the bookmarked position
-					chomp ($splitline[1]);
-					$bookmarkedlineposition = $splitline[1];
-					$previouslybookmarked = 1;
-				}
-			}
-		}
-		close (BOOKMARK);
-	}
-	
-	# if the file did NOT have a bookmark (so it is the first time)
-	if (! $previouslybookmarked) {
-		eval {
-			### try block
-
-			# ...skip the line-by-line search and just get the EOF position to start monitoring for next time
-			open (LOGFILE, "<$logfile") || print("Warning: Could not open file '$logfile'. Skipping file.");
-			seek (LOGFILE, 0, 2);
-			# update the @endlinenums array with the new bookmark
-			$endlinenums[$i] = tell(LOGFILE);
-			close (LOGFILE);
-		};
-		if ($@) {
-			### catch block
-			print("Warning: Could not open file '$logfile'. Skipping file.");
-			exit(1);
-		}
-	}
-	# else if the file already had a previous bookmark...
-	else {
-		# if the file exists...
-		if (-s $logfile) {
-			eval {
-				### try block
-				# ...open the logfile
-				open (LOGFILE, "<$logfile") || print("Warning: Could not open file '$logfile'. Skipping file.");
-				
-				# get EOF position of file
-				seek (LOGFILE, 0, 2);				# seek to the EOF position
-				my $logfile_eof = tell(LOGFILE);	# get the EOF position
-				seek (LOGFILE, 0, 0);				# seek back to the beginning of the file
-				
-				# if in debug mode...
-				if ($debug_mode) {
-					# go back 1MB and start scanning from there (for testing)
-					$bookmarkedlineposition -= 1048576;
-					if ($bookmarkedlineposition < 0) {
-						$bookmarkedlineposition = 0;
-					}
-				}
-
-				# check if the file rotated or the bookmark is no longer valid
-				if ($bookmarkedlineposition > $logfile_eof) {
-					# reset the bookmark to the beginning of the file
-					$bookmarkedlineposition = 0;
-					seek (LOGFILE, 0, 0);
-				}
-				# else, seek to the last known position
-				elsif (seek (LOGFILE, $bookmarkedlineposition, 0) != 1) {
-					# if we get here, then there was an error seeking to the position
-					# so we'll just assume the file was reset, so we should start from the beginning
-					$bookmarkedlineposition = 0;
-					seek (LOGFILE, $bookmarkedlineposition, 0)
-				}
-
-				# loop through the rest of the file, line by line
-				while ($line = <LOGFILE>) {
-					eval {
-						### try block
-						# check if we need to ignore/skip the line
-						if ((length($ignore_regex) > 0) && ($line =~ m/$ignore_regex/i)) {
-							# skip the line
-						}
-						else {
-							eval {
-								### try block
-								# check if the line matches the search regex
-								if ($line =~ m/$search_regex/i) {
-									$total_count++;
-
-									# if in debug mode...
-									if ($total_count <= 50) {
-										# print the line out to screen (only the first 50 lines though!)
-										print "{$logfile}: '$line'\n";
-									}
-								}
-							};
-							if ($@) {
-								### catch block
-								print ("Error: Invalid regular expression for search string.\n");
-								last;
-							}
-						}
-					};
-					if ($@) {
-						### catch block
-						print ("Error: Invalid regular expression for ignore string.\n");
-						last;
-					}
-				}
-				
-				# update the @endlinenums array
-				$endlinenums[$i] = tell(LOGFILE);
-				
-				# close the logfile
-				close (LOGFILE);
-			};
-			if ($@) {
-				### catch block
-				print ("Warning: Could not open file '$logfile'. Skipping file.");
-				last;
-			}
-		}
-		else {
-			# the file is empty, so let's just update the bookmark position to zero
-			$endlinenums[$i] = 0;
-		}
-	}
-}
-
-
-# create/update the bookmark file
-# first, read the values in the bookmark file, then we'll update the values,
-# and save everything to the bookmark file.
-# this is so that we can use multiple monitors for the same log directory
-my @oldfilenames;	# array containing all the filenames in the bookmark file before updating
-my @oldpositions;	# array containing all the positions in the bookmark file before updating
-my @oldsearchstr;	# array containing all the search/ignore strings in the bookmark file before updating
-
-# if there is a bookmark file already...
-if (-s $bookmarkfile) {
-	# ...we'll just update the values in there and add any new ones
-	my $i = 0;
-	# get original bookmark values
-	open (BOOKMARK, "<" . $bookmarkfile) || die ("Error: Could not open bookmark temp file for reading!");
-	while ($line = <BOOKMARK>) {	# read bookmark file
-		chomp ($line);
-		my @splitline = split(/\?/, $line);	# split the bookmarked line (FILENAME?POS)
-		# Make sure there is the proper number of values in the bookmark file (skip old/invalid lines)
-		if (@splitline == 3) {
-			push(@oldfilenames, $splitline[0]);
-			push(@oldpositions, $splitline[1]);
-			push(@oldsearchstr, $splitline[2]);
-		}
-		$i++;
-	}
-	close (BOOKMARK);
-	
-	# now lets update them with the latest positions
-	my $numofnewfiles = @filenames;		# number of filenames that we used this time
-	my $numofoldfiles = @oldfilenames;	# number of filenames that were in the bookmark originally
-	my $updated = 0;
-	for (my $i = 0; $i < $numofnewfiles; $i++) {
-		$updated = 0;
-		for (my $j = 0; ! $updated && $j < $numofoldfiles;$j++) {
-			# get the last part (search+ignore strings)
-			my $searchstr = $search_regex . $ignore_regex;
-			$searchstr =~ s/\?//g;	# get rid of '?'
-			if (($filenames[$i] eq $oldfilenames[$j]) && ($oldsearchstr[$j] eq $searchstr)) {
-				# found the filename, so let's update the old bookmark with the new position
-				$oldfilenames[$j] = $filenames[$i];
-				$oldpositions[$j] = $endlinenums[$i];
-				$oldsearchstr[$j] = $searchstr;
-				
-				$updated = 1;
-			}
-		}
-		# if not updated (meaning it's a new file)...
-		if ( ! $updated ) {
-			# ...add the new file to the list
-			push(@oldfilenames, $filenames[$i]);
-			push(@oldpositions, $endlinenums[$i]);
-			
-			# get the last part (search+ignore strings)
-			my $searchstr = $search_regex . $ignore_regex;
-			$searchstr =~ s/\?//g;	# get rid of '?'
-			push(@oldsearchstr, $searchstr);
-		}
-	}
-}
-# ...else if there is no bookmark file (new bookmark)
-# we'll just create it fresh
-else {
-	my $numofnewfiles = @filenames;	# number of filenames that we used this time
-	for (my $i = 0; $i < $numofnewfiles; $i++) {
-		push(@oldfilenames, $filenames[$i]);
-		push(@oldpositions, $endlinenums[$i]);
-		
-		# get the last part (search+ignore strings)
-		my $searchstr = $search_regex . $ignore_regex;
-		$searchstr =~ s/\?//g;	# get rid of '?'
-		push(@oldsearchstr, $searchstr);
-	}
-}
-
-# now lets save all the updated filenames and positions
-#
-# format of bookmark file:
-# <filename>?<position>?<search+ignore>
-my $numoffiles = @oldfilenames;
-open (BOOKMARK, ">" . $bookmarkfile) || die("Error: Cannot create bookmark temp file for writing!\nBookmark file: " . $bookmarkfile . "\n");
-for (my $i = 0; $i < $numoffiles; $i++) {
-	my $logfile   = $oldfilenames[$i];
-	my $linenum   = $oldpositions[$i];
-	my $searchstr = $oldsearchstr[$i];
-	print (BOOKMARK $logfile . '?' . $linenum . '?' . $searchstr . "\n");
-}
-close (BOOKMARK);
-
-
-# if the bookmark file was not previously created, let's always create it, even when we're testing
-if ((! -e $bookmarkfile) && ($debug_mode)) {
-	print "Created bookmark file '$bookmarkfile'. Re-test the monitor to verify it's working now.\n";
-}
-if (! -e $bookmarkfile) {
-	print "Error: Bookmark file does not exist! Please check permissions: Bookmark filename: '$bookmarkfile'";
-}
-
-
-# print out the number of occurrences for the monitor
-print("total_count $total_count\n");
