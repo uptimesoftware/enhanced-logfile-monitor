@@ -15,32 +15,35 @@ use warnings;
 
 binmode STDOUT, ":utf8";
 use utf8;
-
-use Tie::File;  # for searching through log file and retain a line count
-use MIME::Base64;  # for decoding command line argument
 use JSON;  # for reading and writing the bookmark file
-use Data::Dumper;
+use MIME::Base64;  # for decoding command line argument
+use Tie::File;  # for searching through log file and retain a line count
+use Data::Dumper;  # for debugging the criteria and bookmark hashes
 
+use Cwd            qw( abs_path );
+use File::Basename qw( dirname );
 
 ##############################################################################
-# define if the script is run on a Windows or Unix platform
+# get current working directory to determine if this is Windows or *nix
+my $cwd = dirname(abs_path($0));
+$cwd =~ s/\\/\//g;  # reorientate slashes for consistency
+$cwd =~ s/\/$//g;  # strip off trailing slash
+
 my $is_unix = 0;  # default Windows
-$is_unix = 1 if ( -e "/etc/hosts" );  # determine if it's actually Unix
+$is_unix = 1 if ( $cwd =~ m/^\// );  # check if it's actually Unix
 
 
 ##############################################################################
 # get the CLI variable and parse it into the main 5 variables
 my $cmdlinevar = 0;
 $cmdlinevar = $ARGV[1];
-#if (length($cmdlinevar) == 0) {
 if ( !defined $cmdlinevar ) {
 	# try the first argument instead
-    # Linux agents send arguments as the 2nd arg; others send it as 2nd arg
-	$cmdlinevar = $ARGV[0];
+    $cmdlinevar = $ARGV[0];
 }
 # confirm that we received the necessary arguments by now
-if (length($cmdlinevar) == 0) {
-	print "Error: Arguments were not received on the agent script; quitting.";
+if ( !defined $cmdlinevar ) {
+	print "Error: Arguments were not received by the agent script; quitting.";
 	exit(1);
 }
 
@@ -48,15 +51,15 @@ $cmdlinevar =~ s/(UPDOTTIME)/ /g;         # UPDOTTIME separates each variable
 my @splitline = split(/ /, $cmdlinevar);  # split the command line variables
 
 # criteria hash contains the search criteria provided by the service monitor
-# {directory}    directory to search in (string)
-# {files_regex}  regular expression of files to search within (string)
-# {search_regex} regular expression of the string to find (string)
-# {ignore_regex} lines will be ignored if they match this regex (string)
-# {debug_mode}   whether to produce debug output
-# {filename}     array of the files matching files_regex (array of strings)
-# {position}     array of bookmark positions (array of integers)
-# {bookmarkpos}  corresponding bookmark array entry
-# the array indexes for {bookmarkpos} and {filename} match up
+# 'directory':     directory to search in (string)
+# 'files_regex':   regular expression of files to search within (string)
+# 'search_regex':  regular expression of the string to find (string)
+# 'ignore_regex':  lines will be ignored if they match this regex (string)
+# 'debug_mode':    whether to produce debug output
+# 'filename':      array of the files matching files_regex (array of strings)
+# 'position':      array of bookmark positions (array of integers)
+# 'bookmarkindex': corresponding bookmark array index (array of integers)
+# the array indexes for 'filename', 'position', and 'bookmarkindex' match up
 my %criteria;
 
 # populate criteria hash with variables from the command line variable
@@ -87,65 +90,76 @@ if ( $criteria{debug_mode} ) {
 
 ##############################################################################
 # generated filename of the file which contains the bookmark positions
-my $bookmarkfile = gen_bookmark_filename($criteria{directory});
+my $bookmarkfile = "${cwd}/elm-" . 
+  replace_spec_chars( $criteria{directory} ) . ".bmf";
 
 
 ##############################################################################
-# store the bookmark file into the array @bookmark
-my @bookmark;
+# store the bookmark file into the bookmark array
+# bookmark array structure ($bookmark[index]{key})
+# 'filename':     absolute path to filename
+# 'search_regex': regular expression search string 
+# 'ignore_regex': regular expression ignore string 
+# 'position':     last line searched
 my $json;
-my $bookmarks;
-my $i;
-my $line;
+my $bookmark;  # this is an array ref
 if ( -s $bookmarkfile ) {  # if bookmark file is not empty
-	open (BOOKMARK, '<' . $bookmarkfile) || 
+	open ( BOOKMARK, '<' . $bookmarkfile ) || 
 	  die ("Error: Could not open bookmark file for reading!");
 	$json = <BOOKMARK>;
 	close (BOOKMARK);
-	$bookmarks = decode_json($json);
+	$bookmark = decode_json( $json );
 	
 	if ( $criteria{debug_mode} ) {
-		#print Dumper($bookmarks);
+		#print Dumper($bookmark);
 	}
 }
+#my $numbookmarks = scalar @{ $bookmark };  # get size of bookmark array
+my $numbookmarks = ( $#{ $bookmark } + 1 );  # get last index in bookmark array
+$numbookmarks = 0 if ( $numbookmarks == -1 );  #bookmark file was empty
 
 
 ##############################################################################
 # if in debug mode...
 if ( $criteria{debug_mode} ) {
-	print "Bookmark File: $bookmarkfile\n";
-	print "Checking_Dir: $criteria{directory}\n";
-	print "File_Regex: $criteria{files_regex}\n";
-	print "Search_String: $criteria{search_regex}\n";
-	print "Ignore_String: $criteria{ignore_regex}\n";
-	print "Checking_Files: ";
+	print "Bookmark_File. $bookmarkfile\n";
+	print "Checking_Dir. $criteria{directory}\n";
+	print "File_Regex. $criteria{files_regex}\n";
+	print "Search_String. $criteria{search_regex}\n";
+	print "Ignore_String. $criteria{ignore_regex}\n";
+	print "Checking_Files. ";
 	print join ( ",  ", @{$criteria{filename}} );
 	print "\n";
 }
 
 
 ##############################################################################
-# store previous bookmark position in $criteria{position} array then search
+# store previous bookmark array index in $criteria{position} array then search
+my $i;
 my $j;
 my @logfileArray;
 my $logfile_eof;
 my $linenum;
 my $total_count = 0;  # count the number of occurrences
 my $numfiles = scalar @{$criteria{filename}};
-my $numbookmarks = scalar @bookmark;
+my $newnumbookmarks = $numbookmarks;
 for $i ( 0 .. ($numfiles - 1) ) {
 	# set criteria{position}[i] to zero to start
 	# if doesn't change, then there was no bookmark entry
-	$criteria{position}[$i] = 0; 
-	for $j ( 0 .. ( $numbookmarks - 1 ) ) {
-		if ( $criteria{filename}[$i] eq $bookmark[$j]{filename} and 
-		  $criteria{search_regex} eq $bookmark[$j]{search_regex} and 
-		  $criteria{ignore_regex} eq $bookmark[$j]{ignore_regex} ) {			
-			$criteria{position}[$i] = $bookmark[$j]{position};
-			$criteria{bookmarkpos}[$i] = $j;
+	$criteria{position}[$i] = 0;
+	#print "Working on '$criteria{filename}[$i]'.\n";
+	for $j ( 0 .. ( $numbookmarks - 1 ) ) {	
+		#print "Does it match '$bookmark->[$j]{filename}'?\n";
+		if ( $criteria{filename}[$i] eq $bookmark->[$j]{filename} and 
+		  $criteria{search_regex} eq $bookmark->[$j]{search_regex} and 
+		  $criteria{ignore_regex} eq $bookmark->[$j]{ignore_regex} ) {
+			#print "yes!\n";
+			$criteria{position}[$i] = $bookmark->[$j]{position};
+			$criteria{bookmarkindex}[$i] = $j;
 			last;
 		}
 	}	
+
 	
 	##################################################
 	# start search 1000 lines earlier if in debug mode
@@ -191,8 +205,9 @@ for $i ( 0 .. ($numfiles - 1) ) {
 						# print the first 50 matching lines to screen
 						# limit 50, so we don't overload up
 						if ($total_count <= 50) {
-							print $criteria{filename}[$i] . ", line " . 
-							 (($linenum+1)) . " = '$logfileArray[$linenum]'\n";
+							print $total_count . '. ' . 
+							  $criteria{filename}[$i] . ", line " . 
+							  (($linenum+1))." = '$logfileArray[$linenum]'\n";
 						}
 					}
 				};
@@ -212,15 +227,15 @@ for $i ( 0 .. ($numfiles - 1) ) {
 	}
 
 	# save new end of file position to bookmark array
-	if ( $criteria{bookmarkpos}[$i] ) {
-		$bookmark[$criteria{bookmarkpos}[$i]]{position} = $logfile_eof;
+	if ( defined $criteria{bookmarkindex}[$i] ) {		
+		$bookmark->[$criteria{bookmarkindex}[$i]]{position} = $logfile_eof;
 	}
 	else { # new bookmark entry
-		$bookmark[$numbookmarks]{filename} = $criteria{filename}[$i];
-		$bookmark[$numbookmarks]{position} = $logfile_eof;
-		$bookmark[$numbookmarks]{search_regex} = $criteria{search_regex};
-		$bookmark[$numbookmarks]{ignore_regex} = $criteria{ignore_regex};
-		$numbookmarks++;
+		$bookmark->[$newnumbookmarks]{filename} = $criteria{filename}[$i];
+		$bookmark->[$newnumbookmarks]{position} = $logfile_eof;
+		$bookmark->[$newnumbookmarks]{search_regex} = $criteria{search_regex};
+		$bookmark->[$newnumbookmarks]{ignore_regex} = $criteria{ignore_regex};
+		$newnumbookmarks++;
 	}
 	
 	# untie the log file array
@@ -232,47 +247,27 @@ for $i ( 0 .. ($numfiles - 1) ) {
 # write bookmark array back to bookmark file
 open ( BOOKMARK, '>' . $bookmarkfile ) || 
   die ("Error: Could not open bookmark file, $bookmarkfile, for writing!");
-$json = encode_json \@bookmark;
+$json = encode_json $bookmark;
 print BOOKMARK $json;
-#my $bookmarkline;
-#$i = 0;
-#foreach ( @bookmark ) {
-#	$bookmarkline = $bookmark[$i]{filename} . '?' . $bookmark[$i]{position} .
-#	  '?' . $bookmark[$i]{searchignore};
-#	print MYFILE "$bookmarkline\n";
-#	$i++;
-#}
 close ( BOOKMARK );
-  
+
+
 ##############################################################################
 # print out the number of occurrences for the monitor
 print("total_count $total_count\n");
 
 
+
 ##############################################################################
-# generate the bookmark file name based on the directory being searched
-sub gen_bookmark_filename {
-	my $dir = shift;
-	my $pre_dir = '';
-	if ($is_unix) {
-		$pre_dir = '/opt/uptime-agent/tmp/';
-	}
-	else {
-		if ( -d 'C:\Program Files (x86)\uptime software\up.time agent' ) {
-			# 64bit Windows OS
-			$pre_dir = 'C:\Program Files (x86)\uptime software\up.time agent\UPLOGM-';
-		}
-		else {
-			# 32bit Windows OS
-			$pre_dir = 'C:\Program Files\uptime software\up.time agent\UPLOGM-';
-		}
-	}	
-	chomp($dir);
-	$dir =~ s/\://g;	# get rid of ':'
-	$dir =~ s/\?//g;	# get rid of '?'
-	$dir =~ s/ //g;		# get rid of ' '
-	$dir =~ s/\\/\./g;	# convert '\' to '.'
-	$dir =~ s/\//\./g;	# convert '/' to '.'
-	$dir =~ s/\|/\./g;	# convert '|' to '.'
-	return "$pre_dir" . $dir . ".bmf";
+# convert slashes to periods and remove special characters
+sub replace_spec_chars {
+	my $str = shift;
+	chomp($str);
+	$str =~ s/\://g;	# get rid of ':'
+	$str =~ s/\?//g;	# get rid of '?'
+	$str =~ s/ //g;		# get rid of ' '
+	$str =~ s/\|//g;	# get rid of '|'
+	$str =~ s/\\/\./g;	# convert '\' to '.'
+	$str =~ s/\//\./g;	# convert '/' to '.'	
+	return $str;
 }
