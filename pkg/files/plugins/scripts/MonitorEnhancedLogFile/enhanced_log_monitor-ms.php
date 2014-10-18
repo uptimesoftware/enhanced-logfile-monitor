@@ -62,7 +62,7 @@ else {
 }
 
 $agent_output = uptime_remote_custom_monitor($agent_hostname, $agent_port, $agent_password, $cmd, $cmdlinevar);
-#print $agent_hostname . "\n" . $agent_port . "\n" . $agent_password . "\n" . $cmd . "\n" . $cmdlinevar . "\n";
+// print $agent_hostname . "\n" . $agent_port . "\n" . $agent_password . "\n" . $cmd . "\n" . $cmdlinevar . "\n";
 if (strlen($agent_output) == 0) {
 	print "Error: No lines returned from agent.";
 	exit(1);
