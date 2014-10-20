@@ -43,7 +43,7 @@ if ( !defined $cmdlinevar ) {
 }
 # confirm that we received the necessary arguments by now
 if ( !defined $cmdlinevar ) {
-	print "Error: Arguments were not received by the agent script; quitting.";
+	print "Error: Arguments were not received by the agent script; quitting.\n";
 	exit(1);
 }
 
