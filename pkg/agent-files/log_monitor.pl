@@ -82,7 +82,7 @@ if ( -d $criteria{directory} ) {
 	opendir(DIR, $criteria{directory}) || die "$!";
 	#@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
 	push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
-	  grep /^{criteria{files_regex}}$/, readdir( DIR );
+	  grep /^${criteria{files_regex}}$/, readdir( DIR );
 	closedir(DIR);
 }
 else {
