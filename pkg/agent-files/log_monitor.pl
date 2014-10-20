@@ -76,12 +76,19 @@ $criteria{directory} =~ s/\/$//g;  # strip off trailing slash
 if ( lc( $criteria{debug_mode} ) eq 'on' ) { $criteria{debug_mode} = 1; }
 else { $criteria{debug_mode} = 0; }
 
-# get list of files matching files_regex
-opendir(DIR, $criteria{directory}) || die "$!";
-#@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
-push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
-  grep /${criteria{files_regex}}/, readdir( DIR );
-closedir(DIR);
+# check if the directory exists before proceeding
+if ( -d $criteria{directory} ) {
+	# get list of files matching files_regex
+	opendir(DIR, $criteria{directory}) || die "$!";
+	#@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
+	push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
+	  grep /${criteria{files_regex}}/, readdir( DIR );
+	closedir(DIR);
+}
+else {
+	print "Error: the directory, '$criteria{directory}', does not exist.\n";
+	exit (1);
+}
 
 if ( $criteria{debug_mode} ) {
 	#print Dumper(\%criteria);
