@@ -261,6 +261,7 @@ for $i ( 0 .. ($numfiles - 1) ) {
 # write bookmark array back to bookmark file
 open ( BOOKMARK, '>' . $bookmarkfile ) || 
   die ("Error: Could not open bookmark file, $bookmarkfile, for writing!");
+my $line;
 $i=0;
 #print Dumper(@bookmark);
 for $i ( 0 .. ( $newnumbookmarks - 1) ) {
