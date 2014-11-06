@@ -37,13 +37,13 @@ $is_unix = 1 if ( $cwd =~ m/^\// );  # check if it's actually Unix
 my $cmdlinevar = 0;
 $cmdlinevar = $ARGV[1];
 if ( !defined $cmdlinevar ) {
-	# try the first argument instead
+    # try the first argument instead
     $cmdlinevar = $ARGV[0];
 }
 # confirm that we received the necessary arguments by now
 if ( !defined $cmdlinevar ) {
-	print "Error: Arguments were not received by the agent script; quitting.\n";
-	exit(1);
+    print "Error: Arguments were not received by the agent script; quitting.\n";
+    exit(1);
 }
 
 $cmdlinevar =~ s/(UPDOTTIME)/ /g;         # UPDOTTIME separates each variable
@@ -77,21 +77,21 @@ else { $criteria{debug_mode} = 0; }
 
 # check if the directory exists before proceeding
 if ( -d $criteria{directory} ) {
-	# get list of files matching files_regex
-	opendir(DIR, $criteria{directory}) || die "$!";
-	#@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
-	push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
-	  grep /^${criteria{files_regex}}$/, readdir( DIR );
-	closedir(DIR);
+    # get list of files matching files_regex
+    opendir(DIR, $criteria{directory}) || die "$!";
+    #@{$criteria{filename}} = grep(/${criteria{files_regex}}/, readdir(DIR));
+    push @{$criteria{filename}}, reverse map "$criteria{directory}/$_", 
+      grep /^${criteria{files_regex}}$/, readdir( DIR );
+    closedir(DIR);
 }
 else {
-	print "Error: the directory, '$criteria{directory}', does not exist.\n";
-	exit (1);
+    print "Error: the directory, '$criteria{directory}', does not exist.\n";
+    exit (1);
 }
 
 if ( $criteria{debug_mode} ) {
-	#print "Hash of search items:\n";
-	#print Dumper(\%criteria);
+    #print "Hash of search items:\n";
+    #print Dumper(\%criteria);
 }
 
 
@@ -113,20 +113,20 @@ my $i;
 if ( -s $bookmarkfile ) {  # if bookmark file is not empty
     open ( BOOKMARK, '<' . $bookmarkfile ) || 
       die ("Error: Could not open bookmark file, $bookmarkfile, for reading!");
-	$i=0;
+    $i=0;
     while (my $line = <BOOKMARK>) {  # read bookmark file
-		($bookmark[$i]{filename}, $bookmark[$i]{search_regex}, 
-		  $bookmark[$i]{ignore_regex}, $bookmark[$i]{position}) = 
-		  ($line =~ 
-		  /filename:(.*);search_regex:(.*);ignore_regex:(.*?);position:(.*)/);
-		$i++;
+        ($bookmark[$i]{filename}, $bookmark[$i]{search_regex}, 
+          $bookmark[$i]{ignore_regex}, $bookmark[$i]{position}) = 
+          ($line =~ 
+          /filename:(.*);search_regex:(.*);ignore_regex:(.*?);position:(.*)/);
+        $i++;
     }
     close ( BOOKMARK );
 
-	if ( $criteria{debug_mode} ) {
-		#print "Contents of bookmark file:\n";
-		#print Dumper(@bookmark);
-	}
+    if ( $criteria{debug_mode} ) {
+        #print "Contents of bookmark file:\n";
+        #print Dumper(@bookmark);
+    }
 }
 
 # get number of bookmark entries
@@ -137,14 +137,14 @@ $numbookmarks = 0 if ( $numbookmarks == -1 );
 ##############################################################################
 # if in debug mode...
 if ( $criteria{debug_mode} ) {
-	print "Bookmark_File. $bookmarkfile\n";
-	print "Checking_Dir. $criteria{directory}\n";
-	print "File_Regex. $criteria{files_regex}\n";
-	print "Search_String. $criteria{search_regex}\n";
-	print "Ignore_String. $criteria{ignore_regex}\n";
-	print "Checking_Files. ";
-	print join ( ",  ", @{$criteria{filename}} );
-	print "\n";
+    print "Bookmark_File. $bookmarkfile\n";
+    print "Checking_Dir. $criteria{directory}\n";
+    print "File_Regex. $criteria{files_regex}\n";
+    print "Search_String. $criteria{search_regex}\n";
+    print "Ignore_String. $criteria{ignore_regex}\n";
+    print "Checking_Files. ";
+    print join ( ",  ", @{$criteria{filename}} );
+    print "\n";
 }
 
 
@@ -158,105 +158,105 @@ my $total_count = 0;  # count the number of occurrences
 my $numfiles = scalar @{$criteria{filename}};
 my $newnumbookmarks = $numbookmarks;
 for $i ( 0 .. ($numfiles - 1) ) {
-	# set criteria{position}[i] to zero to start
-	# if doesn't change, then there was no bookmark entry
-	$criteria{position}[$i] = 0;
-	#print "Working on '$criteria{filename}[$i]'.\n";
-	for $j ( 0 .. ( $numbookmarks - 1 ) ) {	
-		#print "Does it match " . $bookmark[$j]{filename} . "?\n";
-		if ( $criteria{filename}[$i] eq $bookmark[$j]{filename} and 
-		  $criteria{search_regex} eq $bookmark[$j]{search_regex} and 
-		  $criteria{ignore_regex} eq $bookmark[$j]{ignore_regex} ) {
-			#print "yes!\n";
-			$criteria{position}[$i] = $bookmark[$j]{position};
-			$criteria{bookmarkindex}[$i] = $j;
-			last;
-		}
-	}	
+    # set criteria{position}[i] to zero to start
+    # if doesn't change, then there was no bookmark entry
+    $criteria{position}[$i] = 0;
+    #print "Working on '$criteria{filename}[$i]'.\n";
+    for $j ( 0 .. ( $numbookmarks - 1 ) ) {    
+        #print "Does it match " . $bookmark[$j]{filename} . "?\n";
+        if ( $criteria{filename}[$i] eq $bookmark[$j]{filename} and 
+          $criteria{search_regex} eq $bookmark[$j]{search_regex} and 
+          $criteria{ignore_regex} eq $bookmark[$j]{ignore_regex} ) {
+            #print "yes!\n";
+            $criteria{position}[$i] = $bookmark[$j]{position};
+            $criteria{bookmarkindex}[$i] = $j;
+            last;
+        }
+    }    
 
-	
-	##################################################
-	# start search 1000 lines earlier if in debug mode
-	if ( $criteria{debug_mode} ) {
-		$criteria{position}[$i] -= 1000;
-		$criteria{position}[$i] = 0 if ($criteria{position}[$i] < 0);
-	}
+    
+    ##################################################
+    # start search 1000 lines earlier if in debug mode
+    if ( $criteria{debug_mode} ) {
+        $criteria{position}[$i] -= 1000;
+        $criteria{position}[$i] = 0 if ($criteria{position}[$i] < 0);
+    }
 
 
-	##################################################
-	# read file into @logfileArray
-	tie @logfileArray, 'Tie::File', "$criteria{filename}[$i]" || 
-	  print("Warning: Could not open file " . $criteria{filename}[$i] .
-	    ". Skipping file.\n");
-	$logfile_eof = scalar @logfileArray;	# get the EOF position
+    ##################################################
+    # read file into @logfileArray
+    tie @logfileArray, 'Tie::File', "$criteria{filename}[$i]" || 
+      print("Warning: Could not open file " . $criteria{filename}[$i] .
+        ". Skipping file.\n");
+    $logfile_eof = scalar @logfileArray;    # get the EOF position
 
-	
-	##############################################################
-	# check if the file rotated or the bookmark is no longer valid
-	if ($criteria{position}[$i] > $logfile_eof) {
-		# reset the bookmark to the beginning of the file
-		$criteria{position}[$i] = 0;		
-	}
-	
-	
-	$linenum = $criteria{position}[$i];				
-	#while ($line = <LOGFILE>) {
-	while ( $linenum < $logfile_eof ){
-		eval {
-			### try block
-			# check if we need to ignore/skip the line
-			if ( ( length( $criteria{ignore_regex} ) > 0 ) && 
-			  ( $logfileArray[$linenum] =~ m/${criteria{ignore_regex}}/i ) ) {
-				# skip the line
-			}
-			else {
-				eval {
-					### try block
-					# check if the line matches the search regex
-					if ( $logfileArray[ $linenum ] =~
-					  m/${criteria{search_regex}}/i ) {
-						$total_count++;
-						# print the first 50 matching lines to screen
-						# limit 50, so we don't overload up
-						if ($total_count <= 50) {
-							print $total_count . '. ' . 
-							  $criteria{filename}[$i] . ", line " . 
-							  (($linenum+1))." = '$logfileArray[$linenum]'\n";
-						}
-					}
-				};
-				if ($@) {
-					### catch block
-					print ("Error: Invalid regular expression for search string.\n");
-					last;
-				}
-			}
-		};
-		if ($@) {
-			### catch block
-			print ("Error: Invalid regular expression for ignore string.\n");
-			last;
-		}
-		$linenum++;
-	}
+    
+    ##############################################################
+    # check if the file rotated or the bookmark is no longer valid
+    if ($criteria{position}[$i] > $logfile_eof) {
+        # reset the bookmark to the beginning of the file
+        $criteria{position}[$i] = 0;        
+    }
+    
+    
+    $linenum = $criteria{position}[$i];                
+    #while ($line = <LOGFILE>) {
+    while ( $linenum < $logfile_eof ){
+        eval {
+            ### try block
+            # check if we need to ignore/skip the line
+            if ( ( length( $criteria{ignore_regex} ) > 0 ) && 
+              ( $logfileArray[$linenum] =~ m/${criteria{ignore_regex}}/i ) ) {
+                # skip the line
+            }
+            else {
+                eval {
+                    ### try block
+                    # check if the line matches the search regex
+                    if ( $logfileArray[ $linenum ] =~
+                      m/${criteria{search_regex}}/i ) {
+                        $total_count++;
+                        # print the first 50 matching lines to screen
+                        # limit 50, so we don't overload up
+                        if ($total_count <= 50) {
+                            print $total_count . '. ' . 
+                              $criteria{filename}[$i] . ", line " . 
+                              (($linenum+1))." = '$logfileArray[$linenum]'\n";
+                        }
+                    }
+                };
+                if ($@) {
+                    ### catch block
+                    print ("Error: Invalid regular expression for search string.\n");
+                    last;
+                }
+            }
+        };
+        if ($@) {
+            ### catch block
+            print ("Error: Invalid regular expression for ignore string.\n");
+            last;
+        }
+        $linenum++;
+    }
 
-	# save new end of file position to bookmark array
-	if ( defined $criteria{bookmarkindex}[$i] ) {		
-		$bookmark[$criteria{bookmarkindex}[$i]]{position} = $logfile_eof;
-	}
-	else { # new bookmark entry
-		$bookmark[$newnumbookmarks]{filename} = $criteria{filename}[$i];
-		$bookmark[$newnumbookmarks]{position} = $logfile_eof;
-		$bookmark[$newnumbookmarks]{search_regex} = $criteria{search_regex};
-		$bookmark[$newnumbookmarks]{ignore_regex} = $criteria{ignore_regex};
-		$newnumbookmarks++;
-	}
-	
-	# untie the log file array
-	untie @logfileArray;
+    # save new end of file position to bookmark array
+    if ( defined $criteria{bookmarkindex}[$i] ) {        
+        $bookmark[$criteria{bookmarkindex}[$i]]{position} = $logfile_eof;
+    }
+    else { # new bookmark entry
+        $bookmark[$newnumbookmarks]{filename} = $criteria{filename}[$i];
+        $bookmark[$newnumbookmarks]{position} = $logfile_eof;
+        $bookmark[$newnumbookmarks]{search_regex} = $criteria{search_regex};
+        $bookmark[$newnumbookmarks]{ignore_regex} = $criteria{ignore_regex};
+        $newnumbookmarks++;
+    }
+    
+    # untie the log file array
+    untie @logfileArray;
 }
-	
-	
+    
+    
 ##############################################################################
 # write bookmark array back to bookmark file
 open ( BOOKMARK, '>' . $bookmarkfile ) || 
@@ -264,12 +264,12 @@ open ( BOOKMARK, '>' . $bookmarkfile ) ||
 $i=0;
 #print Dumper(@bookmark);
 for $i ( 0 .. ( $newnumbookmarks - 1) ) {
-	$line = "filename:$bookmark[$i]{filename};";
-	$line = $line . "search_regex:$bookmark[$i]{search_regex};";
-	$line = $line . "ignore_regex:$bookmark[$i]{ignore_regex};";
-	$line = $line . "position:$bookmark[$i]{position}\n";
-	print BOOKMARK $line;
-	$i++;
+    $line = "filename:$bookmark[$i]{filename};";
+    $line = $line . "search_regex:$bookmark[$i]{search_regex};";
+    $line = $line . "ignore_regex:$bookmark[$i]{ignore_regex};";
+    $line = $line . "position:$bookmark[$i]{position}\n";
+    print BOOKMARK $line;
+    $i++;
 }
 close ( BOOKMARK );
 
@@ -283,13 +283,13 @@ print("total_count $total_count\n");
 ##############################################################################
 # convert slashes to periods and remove special characters
 sub replace_spec_chars {
-	my $str = shift;
-	chomp($str);
-	$str =~ s/\://g;	# get rid of ':'
-	$str =~ s/\?//g;	# get rid of '?'
-	$str =~ s/ //g;		# get rid of ' '
-	$str =~ s/\|//g;	# get rid of '|'
-	$str =~ s/\\/\./g;	# convert '\' to '.'
-	$str =~ s/\//\./g;	# convert '/' to '.'	
-	return $str;
+    my $str = shift;
+    chomp($str);
+    $str =~ s/\://g;    # get rid of ':'
+    $str =~ s/\?//g;    # get rid of '?'
+    $str =~ s/ //g;        # get rid of ' '
+    $str =~ s/\|//g;    # get rid of '|'
+    $str =~ s/\\/\./g;    # convert '\' to '.'
+    $str =~ s/\//\./g;    # convert '/' to '.'    
+    return $str;
 }
