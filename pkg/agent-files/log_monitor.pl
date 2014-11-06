@@ -15,7 +15,7 @@ use warnings;
 
 binmode STDOUT, ":utf8";
 use utf8;
-use JSON;  # for reading and writing the bookmark file
+use XML::Simple qw(:strict);  # for reading and writing the bookmark file
 use MIME::Base64;  # for decoding command line argument
 use Tie::File;  # for searching through log file and retain a line count
 use Data::Dumper;  # for debugging the criteria and bookmark hashes
@@ -98,7 +98,7 @@ if ( $criteria{debug_mode} ) {
 ##############################################################################
 # generated filename of the file which contains the bookmark positions
 my $bookmarkfile = "${cwd}/elm-" . 
-  replace_spec_chars( $criteria{directory} ) . ".bmf";
+  replace_spec_chars( $criteria{directory} ) . ".xml";
 
 
 ##############################################################################
@@ -108,22 +108,19 @@ my $bookmarkfile = "${cwd}/elm-" .
 # 'search_regex': regular expression search string 
 # 'ignore_regex': regular expression ignore string 
 # 'position':     last line searched
-my $json;
-my $bookmark;  # this is an array ref
+my $xml = new XML::Simple(NoAttr=>1, RootName=>'bookmarks', ForceArray => 1, KeyAttr => '', SuppressEmpty => '');
+my $bookmark;
 if ( -s $bookmarkfile ) {  # if bookmark file is not empty
-	open ( BOOKMARK, '<' . $bookmarkfile ) || 
-	  die ("Error: Could not open bookmark file for reading!");
-	$json = <BOOKMARK>;
-	close (BOOKMARK);
-	$bookmark = decode_json( $json );
+	$bookmark = $xml->XMLin($bookmarkfile);  
 	
 	if ( $criteria{debug_mode} ) {
 		#print Dumper($bookmark);
 	}
 }
-#my $numbookmarks = scalar @{ $bookmark };  # get size of bookmark array
-my $numbookmarks = ( $#{ $bookmark } + 1 );  # get last index in bookmark array
-$numbookmarks = 0 if ( $numbookmarks == -1 );  #bookmark file was empty
+
+# get number of bookmark entries
+my $numbookmarks = keys @$bookmark;
+$numbookmarks = 0 if ( $numbookmarks == -1 );
 
 
 ##############################################################################
@@ -156,12 +153,12 @@ for $i ( 0 .. ($numfiles - 1) ) {
 	$criteria{position}[$i] = 0;
 	#print "Working on '$criteria{filename}[$i]'.\n";
 	for $j ( 0 .. ( $numbookmarks - 1 ) ) {	
-		#print "Does it match '$bookmark->[$j]{filename}'?\n";
-		if ( $criteria{filename}[$i] eq $bookmark->[$j]{filename} and 
-		  $criteria{search_regex} eq $bookmark->[$j]{search_regex} and 
-		  $criteria{ignore_regex} eq $bookmark->[$j]{ignore_regex} ) {
+		#print "Does it match " . $bookmark->[$j]{filename}[0] . "?\n";
+		if ( $criteria{filename}[$i] eq $bookmark->[$j]{filename}[0] and 
+		  $criteria{search_regex} eq $bookmark->[$j]{search_regex}[0] and 
+		  $criteria{ignore_regex} eq $bookmark->[$j]{ignore_regex}[0] ) {
 			#print "yes!\n";
-			$criteria{position}[$i] = $bookmark->[$j]{position};
+			$criteria{position}[$i] = $bookmark->[$j]{position}[0];
 			$criteria{bookmarkindex}[$i] = $j;
 			last;
 		}
@@ -254,8 +251,9 @@ for $i ( 0 .. ($numfiles - 1) ) {
 # write bookmark array back to bookmark file
 open ( BOOKMARK, '>' . $bookmarkfile ) || 
   die ("Error: Could not open bookmark file, $bookmarkfile, for writing!");
-$json = encode_json $bookmark;
-print BOOKMARK $json;
+$xml = $xml->XMLout($bookmark);
+print BOOKMARK $xml;
+#print Dumper($xml);
 close ( BOOKMARK );
 
 
