@@ -15,7 +15,6 @@ use warnings;
 
 binmode STDOUT, ":utf8";
 use utf8;
-use XML::Simple qw(:strict);  # for reading and writing the bookmark file
 use MIME::Base64;  # for decoding command line argument
 use Tie::File;  # for searching through log file and retain a line count
 use Data::Dumper;  # for debugging the criteria and bookmark hashes
@@ -91,6 +90,7 @@ else {
 }
 
 if ( $criteria{debug_mode} ) {
+	#print "Hash of search items:\n";
 	#print Dumper(\%criteria);
 }
 
@@ -98,7 +98,7 @@ if ( $criteria{debug_mode} ) {
 ##############################################################################
 # generated filename of the file which contains the bookmark positions
 my $bookmarkfile = "${cwd}/elm-" . 
-  replace_spec_chars( $criteria{directory} ) . ".xml";
+  replace_spec_chars( $criteria{directory} ) . ".bmf";
 
 
 ##############################################################################
@@ -108,18 +108,29 @@ my $bookmarkfile = "${cwd}/elm-" .
 # 'search_regex': regular expression search string 
 # 'ignore_regex': regular expression ignore string 
 # 'position':     last line searched
-my $xml = new XML::Simple(NoAttr=>1, RootName=>'bookmarks', ForceArray => 1, KeyAttr => '', SuppressEmpty => '');
-my $bookmark;
+my @bookmark;
+my $i;
 if ( -s $bookmarkfile ) {  # if bookmark file is not empty
-	$bookmark = $xml->XMLin($bookmarkfile);  
-	
+    open ( BOOKMARK, '<' . $bookmarkfile ) || 
+      die ("Error: Could not open bookmark file, $bookmarkfile, for reading!");
+	$i=0;
+    while (my $line = <BOOKMARK>) {  # read bookmark file
+		($bookmark[$i]{filename}, $bookmark[$i]{search_regex}, 
+		  $bookmark[$i]{ignore_regex}, $bookmark[$i]{position}) = 
+		  ($line =~ 
+		  /filename:(.*);search_regex:(.*);ignore_regex:(.*?);position:(.*)/);
+		$i++;
+    }
+    close ( BOOKMARK );
+
 	if ( $criteria{debug_mode} ) {
-		#print Dumper($bookmark);
+		#print "Contents of bookmark file:\n";
+		#print Dumper(@bookmark);
 	}
 }
 
 # get number of bookmark entries
-my $numbookmarks = keys @$bookmark;
+my $numbookmarks = scalar @bookmark;
 $numbookmarks = 0 if ( $numbookmarks == -1 );
 
 
@@ -139,7 +150,6 @@ if ( $criteria{debug_mode} ) {
 
 ##############################################################################
 # store previous bookmark array index in $criteria{position} array then search
-my $i;
 my $j;
 my @logfileArray;
 my $logfile_eof;
@@ -153,12 +163,12 @@ for $i ( 0 .. ($numfiles - 1) ) {
 	$criteria{position}[$i] = 0;
 	#print "Working on '$criteria{filename}[$i]'.\n";
 	for $j ( 0 .. ( $numbookmarks - 1 ) ) {	
-		#print "Does it match " . $bookmark->[$j]{filename}[0] . "?\n";
-		if ( $criteria{filename}[$i] eq $bookmark->[$j]{filename}[0] and 
-		  $criteria{search_regex} eq $bookmark->[$j]{search_regex}[0] and 
-		  $criteria{ignore_regex} eq $bookmark->[$j]{ignore_regex}[0] ) {
+		#print "Does it match " . $bookmark[$j]{filename} . "?\n";
+		if ( $criteria{filename}[$i] eq $bookmark[$j]{filename} and 
+		  $criteria{search_regex} eq $bookmark[$j]{search_regex} and 
+		  $criteria{ignore_regex} eq $bookmark[$j]{ignore_regex} ) {
 			#print "yes!\n";
-			$criteria{position}[$i] = $bookmark->[$j]{position}[0];
+			$criteria{position}[$i] = $bookmark[$j]{position};
 			$criteria{bookmarkindex}[$i] = $j;
 			last;
 		}
@@ -232,13 +242,13 @@ for $i ( 0 .. ($numfiles - 1) ) {
 
 	# save new end of file position to bookmark array
 	if ( defined $criteria{bookmarkindex}[$i] ) {		
-		$bookmark->[$criteria{bookmarkindex}[$i]]{position} = $logfile_eof;
+		$bookmark[$criteria{bookmarkindex}[$i]]{position} = $logfile_eof;
 	}
 	else { # new bookmark entry
-		$bookmark->[$newnumbookmarks]{filename} = $criteria{filename}[$i];
-		$bookmark->[$newnumbookmarks]{position} = $logfile_eof;
-		$bookmark->[$newnumbookmarks]{search_regex} = $criteria{search_regex};
-		$bookmark->[$newnumbookmarks]{ignore_regex} = $criteria{ignore_regex};
+		$bookmark[$newnumbookmarks]{filename} = $criteria{filename}[$i];
+		$bookmark[$newnumbookmarks]{position} = $logfile_eof;
+		$bookmark[$newnumbookmarks]{search_regex} = $criteria{search_regex};
+		$bookmark[$newnumbookmarks]{ignore_regex} = $criteria{ignore_regex};
 		$newnumbookmarks++;
 	}
 	
@@ -251,9 +261,16 @@ for $i ( 0 .. ($numfiles - 1) ) {
 # write bookmark array back to bookmark file
 open ( BOOKMARK, '>' . $bookmarkfile ) || 
   die ("Error: Could not open bookmark file, $bookmarkfile, for writing!");
-$xml = $xml->XMLout($bookmark);
-print BOOKMARK $xml;
-#print Dumper($xml);
+$i=0;
+#print Dumper(@bookmark);
+for $i ( 0 .. ( $newnumbookmarks - 1) ) {
+	$line = "filename:$bookmark[$i]{filename};";
+	$line = $line . "search_regex:$bookmark[$i]{search_regex};";
+	$line = $line . "ignore_regex:$bookmark[$i]{ignore_regex};";
+	$line = $line . "position:$bookmark[$i]{position}\n";
+	print BOOKMARK $line;
+	$i++;
+}
 close ( BOOKMARK );
 
 
