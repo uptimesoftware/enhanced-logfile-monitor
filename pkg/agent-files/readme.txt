@@ -39,12 +39,12 @@ b. Create/edit the following password file:
    <password>   /opt/uptime-agent/scripts/log_monitor.pl
 
 WINDOWS:
-a. Place the log_monitor.pl file in the uptime agent directory in a subdirectory called "scripts" (C:\program files\uptime software\up.time agent\scripts)
+a. Place the log_monitor.pl file in the uptime agent directory in a subdirectory called "scripts" (C:\Program Files (x86)\uptime software\up.time agent\scripts)
    (create the scripts directory if needed)
 b. Open the uptime Agent Console (Start > up.time agent) and click on Advanced > Custom Scripts
 c. Enter the following:
 Command Name: logmonitor
-Path to Script: cmd.exe /c "C:\perl\bin\perl.exe "C:\Program Files\uptime software\up.time agent\scripts\log_monitor.pl""
+Path to Script: cmd.exe /c "C:\perl\bin\perl.exe "C:\Program Files (x86)\uptime software\up.time agent\scripts\log_monitor.pl""
 
 
 3. Examples
